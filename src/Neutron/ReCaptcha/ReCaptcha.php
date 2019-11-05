@@ -26,12 +26,12 @@ class ReCaptcha
         return '' !== trim($this->privateKey) && '' !== trim($this->publicKey);
     }
 
-    public function bind(Request $request, $challenge = 'recaptcha_challenge_field', $response = 'recaptcha_response_field')
+    public function bind(Request $request, $response = 'g-recaptcha-response')
     {
-        return $this->checkAnswer($request->getClientIp(), $request->request->get($challenge), $request->request->get($response));
+        return $this->checkAnswer($request->getClientIp(), $request->request->get($response));
     }
 
-    public function checkAnswer($ip, $challenge, $response)
+    public function checkAnswer($ip, $response)
     {
         if ('' === trim($ip)) {
             throw new InvalidArgumentException(
@@ -39,26 +39,24 @@ class ReCaptcha
             );
         }
 
-        if ('' === trim($challenge) || '' === trim($response)) {
+        if ('' === trim($response)) {
             return new Response(false, 'incorrect-captcha-sol');
         }
 
-        $request = $this->client->post('/recaptcha/api/verify');
+        $request = $this->client->post('/recaptcha/api/siteverify');
         $request->addPostFields(array(
-            'privatekey' => $this->privateKey,
+            'secret' => $this->privateKey,
             'remoteip'   => $ip,
-            'challenge'  => $challenge,
             'response'   => $response
         ));
 
         $response = $request->send();
-        $data = explode("\n", $response->getBody(true));
-
-        if ('true' === trim($data[0])) {
+        $data = json_decode($response->getBody(true), true);
+        if ($data['success']) {
             return new Response(true);
         }
 
-        return new Response(false, isset($data[1]) ? $data[1] : null);
+        return new Response(false, isset($data['error-codes']) && !empty($data['error-codes']) ? reset($data['error-codes']) : null);
     }
 
     public function getPublicKey()
